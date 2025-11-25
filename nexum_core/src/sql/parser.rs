@@ -75,12 +75,12 @@ impl Parser {
                         .map(|proj| match proj {
                             ast::SelectItem::Wildcard(_) => "*".to_string(),
                             ast::SelectItem::UnnamedExpr(expr) => format!("{}", expr),
-                            ast::SelectItem::ExprWithAlias { expr, alias } => alias.to_string(),
+                            ast::SelectItem::ExprWithAlias { expr: _, alias } => alias.to_string(),
                             _ => "unknown".to_string(),
                         })
                         .collect();
                     
-                    let where_clause = select.selection.as_ref().map(|expr| format!("{}", expr));
+                    let where_clause = select.selection.as_ref().map(|expr| Box::new(expr.clone()));
                     
                     Ok(Statement::Select {
                         table,

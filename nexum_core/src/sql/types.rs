@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use sqlparser::ast::Expr;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum DataType {
@@ -56,6 +57,6 @@ pub enum Statement {
     Select {
         table: String,
         columns: Vec<String>,
-        where_clause: Option<String>,
+        where_clause: Option<Box<Expr>>,
     },
 }

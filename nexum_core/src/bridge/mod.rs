@@ -112,6 +112,38 @@ impl SemanticCache {
     }
 }
 
+pub struct NLTranslator {
+    bridge: PythonBridge,
+    translator: PyObject,
+}
+
+impl NLTranslator {
+    pub fn new() -> Result<Self> {
+        let mut bridge = PythonBridge::new()?;
+        bridge.initialize()?;
+        
+        let translator = Python::with_gil(|py| {
+            let nexum_ai = PyModule::import_bound(py, "nexum_ai.translator")?;
+            let translator_class = nexum_ai.getattr("NLTranslator")?;
+            let translator_instance = translator_class.call0()?;
+            Ok::<PyObject, PyErr>(translator_instance.unbind())
+        })?;
+        
+        Ok(Self { bridge, translator })
+    }
+
+    pub fn translate(&self, natural_query: &str, schema: &str) -> Result<String> {
+        Python::with_gil(|py| {
+            let translator_bound = self.translator.bind(py);
+            let result = translator_bound
+                .call_method1("translate", (natural_query, schema))?;
+            
+            let sql: String = result.extract()?;
+            Ok(sql)
+        }).map_err(|e: PyErr| anyhow!("Python error: {}", e))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -172,5 +204,24 @@ mod tests {
         let cached = cache.get(query).unwrap();
         assert!(cached.is_some());
         assert_eq!(cached.unwrap(), result);
+    }
+
+    #[test]
+    fn test_nl_translator() {
+        if !check_python_available() {
+            println!("Skipping test: Python environment not available");
+            return;
+        }
+
+        let translator = NLTranslator::new().unwrap();
+        
+        let schema = "TABLE users (id INTEGER, name TEXT, age INTEGER)";
+        let nl_query = "Show me all users named Alice";
+        
+        let sql = translator.translate(nl_query, schema).unwrap();
+        
+        println!("Translated: {} -> {}", nl_query, sql);
+        assert!(sql.contains("SELECT"));
+        assert!(sql.contains("users"));
     }
 }

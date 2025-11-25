@@ -1,5 +1,5 @@
 [workspace]
-members = ["nexum_core", "nexum_cli"]
+members = ["nexum_core", "nexum_cli", "tests"]
 resolver = "2"
 
 [workspace.dependencies]

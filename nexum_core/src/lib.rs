@@ -8,4 +8,4 @@ pub use storage::StorageEngine;
 pub use sql::parser::Parser;
 pub use catalog::Catalog;
 pub use executor::Executor;
-pub use bridge::{PythonBridge, SemanticCache};
+pub use bridge::{PythonBridge, SemanticCache, NLTranslator};

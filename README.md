@@ -1,18 +1,25 @@
 # NexumDB - AI-Native Database
 
-An innovative, open-source database that combines traditional SQL with AI-powered features including semantic caching and reinforcement learning-based query optimization.
+An innovative, open-source database that combines traditional SQL with AI-powered features including WHERE clause filtering, natural language queries, semantic caching, and reinforcement learning-based query optimization.
 
 ## Architecture
 
-- **Core System**: Rust-based storage engine using sled, with SQL parsing and execution
-- **AI Engine**: Python-based semantic caching and RL optimization using local models
+- **Core System**: Rust-based storage engine using sled, with SQL parsing and intelligent execution
+- **AI Engine**: Python-based semantic caching, NL translation, and RL optimization using local models
 - **Integration**: PyO3 bindings for seamless Rust-Python integration
 
 ## Features
 
+### v0.2.0 - Intelligent Query Engine
+- **WHERE Clause Filtering**: Full support for comparison (=, >, <, >=, <=, !=) and logical operators (AND, OR)
+- **Natural Language Queries**: ASK command for plain English queries with local LLM or rule-based fallback
+- **Reinforcement Learning**: Q-Learning agent that optimizes query execution strategies
+- **Expression Evaluator**: Type-safe WHERE clause evaluation with comprehensive operator support
+
+### v0.1.0 - Foundation
 - SQL support (CREATE TABLE, INSERT, SELECT)
 - Semantic query caching using local embedding models (all-MiniLM-L6-v2)
-- Self-optimizing query execution with reinforcement learning
+- Self-optimizing query execution
 - Local-only execution (no cloud dependencies)
 - Persistent storage with sled
 - Query performance instrumentation
@@ -71,21 +78,53 @@ cargo test -- --test-threads=1
 ./target/release/nexum
 ```
 
-### Example Session
+### SQL Queries
 
 ```sql
 CREATE TABLE users (id INTEGER, name TEXT, age INTEGER);
 INSERT INTO users (id, name, age) VALUES (1, 'Alice', 30), (2, 'Bob', 25);
+
+-- Simple query
 SELECT * FROM users;
+
+-- With WHERE clause (NEW in v0.2.0)
+SELECT * FROM users WHERE age > 25;
+SELECT * FROM users WHERE name = 'Alice' AND age >= 30;
 ```
 
-### Semantic Caching Demo
+### Natural Language Queries (NEW in v0.2.0)
 
-The database automatically caches SELECT query results using semantic similarity:
+```
+nexumdb> ASK Show me all users
+Translating: 'Show me all users'
+Generated SQL: SELECT * FROM users
+[Results displayed]
 
+nexumdb> ASK Find users older than 25
+Translating: 'Find users older than 25'
+Generated SQL: SELECT * FROM users WHERE age > 25
+[Filtered results displayed]
+```
+
+### Performance Examples
+
+**WHERE Clause Filtering:**
+```
+Query: SELECT * FROM products WHERE price > 100 AND price < 500
+Filtered 15 rows using WHERE clause
+Query executed in 2.8ms
+```
+
+**Semantic Caching:**
 ```
 First SELECT:  Query executed in 2.5ms  (cache miss)
-Second SELECT: Query executed in 0.04ms (cache hit - 60x faster!)
+Second SELECT: Query executed in 0.04ms (cache hit - 60x faster)
+```
+
+**RL Optimization (Automatic):**
+```
+The RL agent learns optimal strategies automatically.
+No configuration needed - just use the database!
 ```
 
 ## Development Status

@@ -1,14 +1,29 @@
-use nexum_core::{StorageEngine, Parser, Executor};
+use nexum_core::{StorageEngine, Parser, Executor, Catalog, NLTranslator};
 use std::io::{self, Write};
 
 fn main() -> anyhow::Result<()> {
-    println!("NexumDB v0.1.0 - AI-Native Database");
+    println!("NexumDB v0.2.0 - AI-Native Database with Natural Language Support");
     println!("Initializing...\n");
 
     let storage = StorageEngine::new("./nexumdb_data")?;
-    let executor = Executor::new(storage).with_cache();
+    let executor = Executor::new(storage.clone()).with_cache();
+    let catalog = Catalog::new(storage);
     
-    println!("Ready. Type SQL commands or 'exit' to quit\n");
+    let nl_translator = match NLTranslator::new() {
+        Ok(translator) => {
+            println!("Natural Language translator enabled");
+            Some(translator)
+        }
+        Err(e) => {
+            println!("Warning: NL translator not available: {}", e);
+            None
+        }
+    };
+    
+    println!("Ready. Commands:");
+    println!("  - SQL: Type any SQL query (CREATE TABLE, INSERT, SELECT)");
+    println!("  - ASK: Type 'ASK <question>' for natural language queries");
+    println!("  - EXIT: Type 'exit' or 'quit' to exit\n");
 
     loop {
         print!("nexumdb> ");
@@ -26,6 +41,44 @@ fn main() -> anyhow::Result<()> {
         if input.eq_ignore_ascii_case("exit") || input.eq_ignore_ascii_case("quit") {
             println!("Goodbye!");
             break;
+        }
+
+        if input.to_uppercase().starts_with("ASK ") {
+            let natural_query = input[4..].trim();
+            
+            if let Some(ref translator) = nl_translator {
+                let schema = get_schema_context(&catalog);
+                
+                println!("Translating: '{}'", natural_query);
+                match translator.translate(natural_query, &schema) {
+                    Ok(sql) => {
+                        println!("Generated SQL: {}", sql);
+                        println!();
+                        
+                        match Parser::parse(&sql) {
+                            Ok(statement) => {
+                                match executor.execute(statement) {
+                                    Ok(result) => {
+                                        println!("{:?}", result);
+                                    }
+                                    Err(e) => {
+                                        eprintln!("Execution error: {}", e);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("Parse error: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Translation error: {}", e);
+                    }
+                }
+            } else {
+                eprintln!("Natural language translator not available");
+            }
+            continue;
         }
 
         match Parser::parse(input) {
@@ -46,4 +99,24 @@ fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn get_schema_context(catalog: &Catalog) -> String {
+    match catalog.list_tables() {
+        Ok(tables) => {
+            let mut schema = String::new();
+            for table_name in tables {
+                if let Ok(Some(table_schema)) = catalog.get_table(&table_name) {
+                    schema.push_str(&format!("TABLE {} (", table_schema.name));
+                    let columns: Vec<String> = table_schema.columns.iter()
+                        .map(|c| format!("{} {:?}", c.name, c.data_type))
+                        .collect();
+                    schema.push_str(&columns.join(", "));
+                    schema.push_str(")\n");
+                }
+            }
+            schema
+        }
+        Err(_) => String::new(),
+    }
 }

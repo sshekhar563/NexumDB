@@ -5,6 +5,9 @@ use crate::bridge::SemanticCache;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
+mod filter;
+use filter::ExpressionEvaluator;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Row {
     pub values: Vec<Value>,
@@ -63,7 +66,7 @@ impl Executor {
                     rows: values.len() 
                 })
             }
-            Statement::Select { table, columns, where_clause: _ } => {
+            Statement::Select { table, columns, where_clause } => {
                 if let Some(cache) = &self.cache {
                     let query_str = format!("SELECT {:?} FROM {}", columns, table);
                     
@@ -78,15 +81,31 @@ impl Executor {
                     }
                 }
                 
-                let _schema = self.catalog.get_table(&table)?
+                let schema = self.catalog.get_table(&table)?
                     .ok_or_else(|| StorageError::ReadError(format!("Table {} not found", table)))?;
                 
                 let prefix = Self::table_data_prefix(&table);
                 let all_rows = self.storage.scan_prefix(&prefix)?;
                 
-                let rows: Vec<Row> = all_rows.iter()
+                let mut rows: Vec<Row> = all_rows.iter()
                     .filter_map(|(_, v)| serde_json::from_slice::<Row>(v).ok())
                     .collect();
+                
+                if let Some(where_expr) = where_clause {
+                    let column_names: Vec<String> = schema.columns.iter()
+                        .map(|c| c.name.clone())
+                        .collect();
+                    let evaluator = ExpressionEvaluator::new(column_names);
+                    
+                    rows = rows.into_iter()
+                        .filter(|row| {
+                            evaluator.evaluate(&where_expr, &row.values)
+                                .unwrap_or(false)
+                        })
+                        .collect();
+                    
+                    println!("Filtered {} rows using WHERE clause", rows.len());
+                }
                 
                 if let Some(cache) = &self.cache {
                     let query_str = format!("SELECT {:?} FROM {}", columns, table);
