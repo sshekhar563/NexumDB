@@ -1,3 +1,5 @@
+[![CI](https://github.com/aviralgarg05/NexumDB/actions/workflows/ci.yml/badge.svg)](https://github.com/aviralgarg05/NexumDB/actions/workflows/ci.yml)
+
 # NexumDB - AI-Native Database
 
 An innovative, open-source database that combines traditional SQL with AI-powered features including advanced query operators, natural language processing, semantic caching, and reinforcement learning-based query optimization.
