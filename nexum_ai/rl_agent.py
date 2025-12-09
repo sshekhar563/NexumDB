@@ -4,7 +4,7 @@ Learns to optimize query execution strategies based on performance metrics
 """
 
 import numpy as np
-from typing import Dict
+from typing import Dict, Optional
 import json
 import os
 
@@ -175,7 +175,7 @@ class QLearningAgent:
             'avg_reward': np.mean([h['reward'] for h in self.training_history[-100:]]) if self.training_history else 0.0
         }
     
-    def save_state(self, filepath: str = None) -> None:
+    def save_state(self, filepath: Optional[str] = None) -> None:
         """Save Q-table and agent state to file using joblib"""
         import joblib
         
@@ -195,7 +195,7 @@ class QLearningAgent:
         except Exception as e:
             print(f"Error saving agent state: {e}")
     
-    def load_state(self, filepath: str = None) -> None:
+    def load_state(self, filepath: Optional[str] = None) -> None:
         """Load Q-table and agent state from file using joblib"""
         import joblib
         import os
