@@ -2,10 +2,8 @@
 Unit tests for model_manager.py - Model loading and inference
 """
 
-import pytest
 import os
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
 from nexum_ai.model_manager import ModelManager
 
 
@@ -21,7 +19,7 @@ class TestModelManager:
     def test_initialization_creates_directory(self, temp_models_dir):
         """Test that ModelManager creates models directory if it doesn't exist"""
         new_dir = os.path.join(temp_models_dir, "new_models")
-        manager = ModelManager(models_dir=new_dir)
+        ModelManager(models_dir=new_dir)
         assert os.path.exists(new_dir)
     
     def test_ensure_model_existing_file(self, temp_models_dir):

@@ -2,10 +2,8 @@
 Unit tests for rl_agent.py - RL training loop, state/action handling
 """
 
-import pytest
 import os
 import tempfile
-from unittest.mock import Mock, patch
 from nexum_ai.rl_agent import QLearningAgent
 
 

@@ -2,9 +2,8 @@
 Unit tests for translator.py - NL to SQL translation
 """
 
-import pytest
 import os
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from nexum_ai.translator import NLTranslator
 
 

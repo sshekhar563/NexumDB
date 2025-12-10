@@ -2,9 +2,6 @@
 Unit tests for optimizer.py - Query optimization logic
 """
 
-import pytest
-import numpy as np
-from unittest.mock import Mock, patch
 from nexum_ai.optimizer import SemanticCache, QueryOptimizer
 
 

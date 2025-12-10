@@ -70,7 +70,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r nexum_ai/requirements.txt
+          pip install -r nexum_ai/requirements-ci.txt
           pip install -r nexum_ai/tests/requirements.txt
 
       - name: Byte-compile nexum_ai
@@ -78,7 +78,6 @@ jobs:
 
       - name: Run pytest
         run: |
-          cd nexum_ai
           pytest --cov=. --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage to Codecov
@@ -87,4 +86,5 @@ jobs:
           file: ./nexum_ai/coverage.xml
           flags: python
           name: nexum_ai-coverage
+          token: ${{ secrets.CODECOV_TOKEN }}
         if: always()

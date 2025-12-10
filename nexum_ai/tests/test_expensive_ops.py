@@ -3,9 +3,7 @@ Unit tests for expensive operations - Model loading and GPU operations
 Uses mocks to avoid actual model downloads and GPU usage
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-import numpy as np
+from unittest.mock import Mock, patch
 
 
 class TestExpensiveModelLoading:

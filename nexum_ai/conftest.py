@@ -5,7 +5,6 @@ Pytest configuration and fixtures for nexum_ai tests
 import pytest
 import tempfile
 import shutil
-from pathlib import Path
 
 
 @pytest.fixture
