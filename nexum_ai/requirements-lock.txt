@@ -73,9 +73,7 @@ scikit-learn==1.7.2
     # via
     #   -r requirements.txt
     #   sentence-transformers
-# Updated to latest scipy version compatible with numpy 1.26.4
-scipy==1.16.2
-
+scipy==1.11.4
     # via
     #   scikit-learn
     #   sentence-transformers
