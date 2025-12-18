@@ -1,14 +1,16 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use nexum_core::StorageEngine;
 use std::time::Duration;
+
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+
+use nexum_core::StorageEngine;
 
 fn storage_write_throughput(c: &mut Criterion) {
     let mut group = c.benchmark_group("storage_write");
-    
+
     // Test different data sizes
     for size in [100, 1000, 10000, 100000].iter() {
         group.throughput(Throughput::Elements(*size as u64));
-        
+
         group.bench_with_input(BenchmarkId::new("sequential_writes", size), size, |b, &size| {
             b.iter_batched(
                 || StorageEngine::memory().unwrap(),
@@ -23,16 +25,16 @@ fn storage_write_throughput(c: &mut Criterion) {
             );
         });
     }
-    
+
     group.finish();
 }
 
 fn storage_read_throughput(c: &mut Criterion) {
     let mut group = c.benchmark_group("storage_read");
-    
+
     for size in [100, 1000, 10000, 100000].iter() {
         group.throughput(Throughput::Elements(*size as u64));
-        
+
         group.bench_with_input(BenchmarkId::new("sequential_reads", size), size, |b, &size| {
             b.iter_batched(
                 || {
@@ -55,17 +57,17 @@ fn storage_read_throughput(c: &mut Criterion) {
             );
         });
     }
-    
+
     group.finish();
 }
 
 fn storage_mixed_workload(c: &mut Criterion) {
     let mut group = c.benchmark_group("storage_mixed");
     group.measurement_time(Duration::from_secs(10));
-    
+
     for ratio in [(70, 30), (50, 50), (30, 70)].iter() {
         let (read_pct, write_pct) = ratio;
-        
+
         group.bench_with_input(
             BenchmarkId::new("read_write_mix", format!("{}r_{}w", read_pct, write_pct)),
             ratio,
@@ -100,13 +102,13 @@ fn storage_mixed_workload(c: &mut Criterion) {
             },
         );
     }
-    
+
     group.finish();
 }
 
 fn storage_scan_prefix(c: &mut Criterion) {
     let mut group = c.benchmark_group("storage_scan");
-    
+
     for prefix_size in [10, 100, 1000].iter() {
         group.bench_with_input(
             BenchmarkId::new("prefix_scan", prefix_size),
@@ -133,26 +135,26 @@ fn storage_scan_prefix(c: &mut Criterion) {
             },
         );
     }
-    
+
     group.finish();
 }
 
 fn storage_persistence_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("storage_persistence");
-    
+
     group.bench_function("flush_performance", |b| {
         b.iter_batched(
             || {
                 let temp_dir = tempfile::tempdir().unwrap();
                 let engine = StorageEngine::new(temp_dir.path().join("bench_db")).unwrap();
-                
+
                 // Write some data
                 for i in 0..1000 {
                     let key = format!("key_{:06}", i);
                     let value = format!("value_{:06}", i);
                     engine.set(key.as_bytes(), value.as_bytes()).unwrap();
                 }
-                
+
                 (engine, temp_dir)
             },
             |(engine, _temp_dir)| {
@@ -161,7 +163,7 @@ fn storage_persistence_benchmark(c: &mut Criterion) {
             criterion::BatchSize::SmallInput,
         );
     });
-    
+
     group.finish();
 }
 

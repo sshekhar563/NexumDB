@@ -1,9 +1,10 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use nexum_core::executor::filter::ExpressionEvaluator;
-use nexum_core::sql::types::Value;
 use sqlparser::ast::{Expr, Statement};
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
+
+use nexum_core::executor::filter::ExpressionEvaluator;
+use nexum_core::sql::types::Value;
 
 fn create_test_row(id: i64, name: &str, age: i64, salary: f64, active: bool) -> Vec<Value> {
     vec![
@@ -18,7 +19,7 @@ fn create_test_row(id: i64, name: &str, age: i64, salary: f64, active: bool) -> 
 fn parse_where_clause(sql: &str) -> Expr {
     let dialect = GenericDialect {};
     let ast = Parser::parse_sql(&dialect, &format!("SELECT * FROM t WHERE {}", sql)).unwrap();
-    
+
     if let Statement::Query(query) = &ast[0] {
         if let sqlparser::ast::SetExpr::Select(select) = &*query.body {
             if let Some(where_expr) = &select.selection {
@@ -31,7 +32,7 @@ fn parse_where_clause(sql: &str) -> Expr {
 
 fn filter_simple_comparisons_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("filter_simple_comparisons");
-    
+
     let column_names = vec![
         "id".to_string(),
         "name".to_string(),
@@ -40,7 +41,7 @@ fn filter_simple_comparisons_benchmark(c: &mut Criterion) {
         "active".to_string(),
     ];
     let evaluator = ExpressionEvaluator::new(column_names);
-    
+
     let test_cases = vec![
         ("integer_eq", "id = 1000", create_test_row(1000, "John", 30, 50000.0, true)),
         ("integer_gt", "age > 25", create_test_row(1, "Jane", 30, 60000.0, true)),
@@ -49,23 +50,23 @@ fn filter_simple_comparisons_benchmark(c: &mut Criterion) {
         ("text_eq", "name = 'John'", create_test_row(4, "John", 28, 52000.0, true)),
         ("boolean_eq", "active = true", create_test_row(5, "Mary", 32, 58000.0, true)),
     ];
-    
+
     for (test_name, sql, row_data) in test_cases {
         let where_expr = parse_where_clause(sql);
-        
+
         group.bench_function(test_name, |b| {
             b.iter(|| {
                 black_box(evaluator.evaluate(&where_expr, &row_data).unwrap());
             });
         });
     }
-    
+
     group.finish();
 }
 
 fn filter_complex_expressions_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("filter_complex_expressions");
-    
+
     let column_names = vec![
         "id".to_string(),
         "name".to_string(),
@@ -74,7 +75,7 @@ fn filter_complex_expressions_benchmark(c: &mut Criterion) {
         "active".to_string(),
     ];
     let evaluator = ExpressionEvaluator::new(column_names);
-    
+
     let test_cases = vec![
         (
             "and_condition",
@@ -102,26 +103,26 @@ fn filter_complex_expressions_benchmark(c: &mut Criterion) {
             create_test_row(5, "John", 32, 58000.0, true),
         ),
     ];
-    
+
     for (test_name, sql, row_data) in test_cases {
         let where_expr = parse_where_clause(sql);
-        
+
         group.bench_function(test_name, |b| {
             b.iter(|| {
                 black_box(evaluator.evaluate(&where_expr, &row_data).unwrap());
             });
         });
     }
-    
+
     group.finish();
 }
 
 fn filter_like_patterns_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("filter_like_patterns");
-    
+
     let column_names = vec!["name".to_string(), "email".to_string()];
     let evaluator = ExpressionEvaluator::new(column_names);
-    
+
     let test_cases = vec![
         (
             "prefix_match",
@@ -149,26 +150,26 @@ fn filter_like_patterns_benchmark(c: &mut Criterion) {
             vec![Value::Text("Bob Wilson".to_string()), Value::Text("bob@company.com".to_string())],
         ),
     ];
-    
+
     for (test_name, sql, row_data) in test_cases {
         let where_expr = parse_where_clause(sql);
-        
+
         group.bench_function(test_name, |b| {
             b.iter(|| {
                 black_box(evaluator.evaluate(&where_expr, &row_data).unwrap());
             });
         });
     }
-    
+
     group.finish();
 }
 
 fn filter_in_list_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("filter_in_list");
-    
+
     let column_names = vec!["id".to_string(), "status".to_string()];
     let evaluator = ExpressionEvaluator::new(column_names);
-    
+
     for list_size in [5, 10, 50, 100].iter() {
         let mut id_list = Vec::new();
         for i in 0..*list_size {
@@ -176,12 +177,12 @@ fn filter_in_list_benchmark(c: &mut Criterion) {
         }
         let sql = format!("id IN ({})", id_list.join(", "));
         let where_expr = parse_where_clause(&sql);
-        
+
         let row_data = vec![
             Value::Integer(*list_size / 2), // Should be found in the middle
             Value::Text("active".to_string()),
         ];
-        
+
         group.bench_with_input(
             BenchmarkId::new("id_in_list", list_size),
             &where_expr,
@@ -192,7 +193,7 @@ fn filter_in_list_benchmark(c: &mut Criterion) {
             },
         );
     }
-    
+
     // Test string IN lists
     let status_sql = "status IN ('active', 'pending', 'inactive', 'suspended', 'archived')";
     let status_expr = parse_where_clause(status_sql);
@@ -200,22 +201,22 @@ fn filter_in_list_benchmark(c: &mut Criterion) {
         Value::Integer(1),
         Value::Text("active".to_string()),
     ];
-    
+
     group.bench_function("string_in_list", |b| {
         b.iter(|| {
             black_box(evaluator.evaluate(&status_expr, &status_row).unwrap());
         });
     });
-    
+
     group.finish();
 }
 
 fn filter_between_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("filter_between");
-    
+
     let column_names = vec!["age".to_string(), "salary".to_string(), "score".to_string()];
     let evaluator = ExpressionEvaluator::new(column_names);
-    
+
     let test_cases = vec![
         (
             "integer_between",
@@ -233,24 +234,24 @@ fn filter_between_benchmark(c: &mut Criterion) {
             vec![Value::Integer(28), Value::Float(52000.0), Value::Float(88.7)],
         ),
     ];
-    
+
     for (test_name, sql, row_data) in test_cases {
         let where_expr = parse_where_clause(sql);
-        
+
         group.bench_function(test_name, |b| {
             b.iter(|| {
                 black_box(evaluator.evaluate(&where_expr, &row_data).unwrap());
             });
         });
     }
-    
+
     group.finish();
 }
 
 fn filter_batch_evaluation_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("filter_batch_evaluation");
     group.sample_size(10); // Reduce sample size for large datasets
-    
+
     let column_names = vec![
         "id".to_string(),
         "name".to_string(),
@@ -259,7 +260,7 @@ fn filter_batch_evaluation_benchmark(c: &mut Criterion) {
         "active".to_string(),
     ];
     let evaluator = ExpressionEvaluator::new(column_names);
-    
+
     // Create test data (reduced from 10k to 5k)
     let mut test_rows = Vec::new();
     for i in 0..5000 {
@@ -271,19 +272,19 @@ fn filter_batch_evaluation_benchmark(c: &mut Criterion) {
             i % 2 == 0,
         ));
     }
-    
+
     let filters = vec![
         ("simple_filter", "age > 30"),
         ("complex_filter", "age > 25 AND salary > 50000.0 AND active = true"),
         ("like_filter", "name LIKE 'User1%'"),
         ("range_filter", "age BETWEEN 25 AND 45 AND salary BETWEEN 40000.0 AND 70000.0"),
     ];
-    
+
     for (filter_name, sql) in filters {
         let where_expr = parse_where_clause(sql);
-        
+
         group.throughput(Throughput::Elements(test_rows.len() as u64));
-        
+
         group.bench_with_input(
             BenchmarkId::new("5k_rows", filter_name),
             &where_expr,
@@ -300,7 +301,7 @@ fn filter_batch_evaluation_benchmark(c: &mut Criterion) {
             },
         );
     }
-    
+
     group.finish();
 }
 

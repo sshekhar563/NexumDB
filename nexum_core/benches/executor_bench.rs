@@ -1,7 +1,9 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use nexum_core::{Executor, Parser, StorageEngine};
-use nexum_core::storage::Result;
 use std::time::Duration;
+
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+
+use nexum_core::storage::Result;
+use nexum_core::{Executor, Parser, StorageEngine};
 
 fn setup_test_data(engine: &StorageEngine, num_records: usize) -> Result<()> {
     // Create users table data
