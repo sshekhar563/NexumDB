@@ -94,7 +94,7 @@ impl ResultCache {
     fn cache_key(&self, query: &str, data_hash: u64) -> String {
         let mut hasher = Sha256::new();
         hasher.update(query.as_bytes());
-        hasher.update(&data_hash.to_le_bytes());
+        hasher.update(data_hash.to_le_bytes());
         let result = hasher.finalize();
         format!("{:x}", result)
     }
