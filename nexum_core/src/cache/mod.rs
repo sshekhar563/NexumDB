@@ -12,19 +12,23 @@
 //!
 //! # Usage
 //!
-//! ```rust
+//! ```rust,no_run
 //! use nexum_core::cache::ResultCache;
 //!
-//! let cache = ResultCache::new(".nexum/cache")?;
+//! fn main() -> anyhow::Result<()> {
+//!     let cache = ResultCache::new(".nexum/cache")?;
+//!     let data_hash: u64 = 12345; // Hash of the underlying data
 //!
-//! // Try to get cached result
-//! if let Some(result) = cache.get("SELECT * FROM users", &data_hash)? {
-//!     return result;
+//!     // Try to get cached result
+//!     if let Some(result) = cache.get("SELECT * FROM users", data_hash)? {
+//!         println!("Cache hit: {}", result);
+//!     }
+//!
+//!     // Execute query and cache result
+//!     let result = "query result".to_string();
+//!     cache.put("SELECT * FROM users", data_hash, &result)?;
+//!     Ok(())
 //! }
-//!
-//! // Execute query and cache result
-//! let result = execute_query();
-//! cache.put("SELECT * FROM users", &data_hash, &result)?;
 //! ```
 
 use anyhow::{anyhow, Result};
