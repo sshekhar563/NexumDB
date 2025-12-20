@@ -29,9 +29,8 @@
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::DefaultHasher;
+use sha2::{Digest, Sha256};
 use std::fs;
-use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -91,12 +90,13 @@ impl ResultCache {
         self.enabled
     }
 
-    /// Generate cache key from query and data hash
+    /// Generate cache key from query and data hash using stable SHA-256
     fn cache_key(&self, query: &str, data_hash: u64) -> String {
-        let mut hasher = DefaultHasher::new();
-        query.hash(&mut hasher);
-        data_hash.hash(&mut hasher);
-        format!("{:x}", hasher.finish())
+        let mut hasher = Sha256::new();
+        hasher.update(query.as_bytes());
+        hasher.update(&data_hash.to_le_bytes());
+        let result = hasher.finalize();
+        format!("{:x}", result)
     }
 
     /// Get cache file path for a given key
@@ -414,11 +414,16 @@ pub struct CacheStats {
     pub newest_entry_timestamp: Option<u64>,
 }
 
-/// Calculate hash of data state for cache invalidation
+/// Calculate stable hash of data state for cache invalidation using SHA-256
 pub fn calculate_data_hash(data: &[u8]) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    data.hash(&mut hasher);
-    hasher.finish()
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    let result = hasher.finalize();
+    
+    // Convert first 8 bytes of SHA-256 hash to u64 for compatibility
+    let mut bytes = [0u8; 8];
+    bytes.copy_from_slice(&result[0..8]);
+    u64::from_le_bytes(bytes)
 }
 
 #[cfg(test)]
@@ -566,5 +571,40 @@ mod tests {
         let stats = cache.stats().unwrap();
         assert_eq!(stats.total_entries, 2);
         assert!(stats.total_size_bytes > 0);
+    }
+
+    #[test]
+    fn test_stable_hash_algorithm() {
+        // Test that hash values are consistent across runs
+        let data1 = b"test data";
+        let data2 = b"test data";
+        let data3 = b"different data";
+
+        let hash1 = calculate_data_hash(data1);
+        let hash2 = calculate_data_hash(data2);
+        let hash3 = calculate_data_hash(data3);
+
+        // Same data should produce same hash
+        assert_eq!(hash1, hash2);
+        
+        // Different data should produce different hash
+        assert_ne!(hash1, hash3);
+
+        // Test cache key stability
+        let temp_dir = TempDir::new().unwrap();
+        let cache = ResultCache::new(temp_dir.path()).unwrap();
+        
+        let key1 = cache.cache_key("SELECT * FROM users", 12345);
+        let key2 = cache.cache_key("SELECT * FROM users", 12345);
+        let key3 = cache.cache_key("SELECT * FROM orders", 12345);
+
+        // Same inputs should produce same key
+        assert_eq!(key1, key2);
+        
+        // Different inputs should produce different key
+        assert_ne!(key1, key3);
+        
+        // Keys should be reasonable length (SHA-256 hex = 64 chars)
+        assert_eq!(key1.len(), 64);
     }
 }

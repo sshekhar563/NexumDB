@@ -1,5 +1,5 @@
 use crate::bridge::SemanticCache;
-use crate::cache::{ResultCache, calculate_data_hash};
+use crate::cache::ResultCache;
 use crate::catalog::Catalog;
 use crate::sql::types::{Statement, Value};
 use crate::storage::{Result, StorageEngine, StorageError};
