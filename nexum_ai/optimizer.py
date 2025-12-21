@@ -130,7 +130,6 @@ class SemanticCache:
         if os.path.exists(filepath) and filepath.endswith('.pkl'):
             try:
                 import pickle
-                import io
                 
                 # Use RestrictedUnpickler to limit allowed classes
                 class RestrictedUnpickler(pickle.Unpickler):
