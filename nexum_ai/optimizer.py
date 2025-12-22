@@ -256,8 +256,15 @@ class SemanticCache:
         
         for entry in self.cache:
             similarity = self.cosine_similarity(query_vec, entry['vector'])
+            # Smart truncation for cached query display
+            cached_query = entry['query']
+            if len(cached_query) > 50:
+                display_query = cached_query[:50] + '...'
+            else:
+                display_query = cached_query
+                
             cache_analysis.append({
-                'cached_query': entry['query'][:50] + ('...' if len(entry['query']) > 50 else ''),
+                'cached_query': display_query,
                 'similarity': round(similarity, 4),
                 'would_hit': similarity >= self.similarity_threshold
             })
@@ -268,11 +275,17 @@ class SemanticCache:
         # Sort by similarity descending
         cache_analysis.sort(key=lambda x: x['similarity'], reverse=True)
         
+        # Smart truncation for best match
+        if best_match and len(best_match) > 50:
+            best_match_display = best_match[:50] + '...'
+        else:
+            best_match_display = best_match
+        
         return {
             'query': query,
             'cache_entries_checked': len(self.cache),
             'similarity_threshold': self.similarity_threshold,
-            'best_match': best_match[:50] + '...' if best_match and len(best_match) > 50 else best_match,
+            'best_match': best_match_display,
             'best_similarity': round(best_similarity, 4),
             'would_hit_cache': best_similarity >= self.similarity_threshold,
             'top_matches': cache_analysis[:5]  # Top 5 similar cached queries
@@ -360,15 +373,14 @@ class QueryOptimizer:
             q_values = {a: 0.0 for a in available_actions}
         
         best_action = max(available_actions, key=lambda a: q_values.get(a, 0.0))
-        would_explore = np.random.random() < self.epsilon
         
         return {
             'state': state,
             'q_values': q_values,
             'best_action': best_action,
             'epsilon': self.epsilon,
-            'would_explore': would_explore,
-            'exploration_note': 'Random action possible' if would_explore else 'Would use best action'
+            'would_explore': self.epsilon > 0,
+            'exploration_note': f'Random action possible (ε={self.epsilon})' if self.epsilon > 0 else 'Would use best action'
         }
 
 
@@ -470,7 +482,15 @@ def format_explain_output(explain_result: Dict[str, Any]) -> str:
     lines.append("=" * 70)
     lines.append("QUERY EXECUTION PLAN")
     lines.append("=" * 70)
-    lines.append(f"Query: {explain_result['query'][:60]}...")
+    
+    # Smart query truncation
+    query = explain_result['query']
+    if len(query) > 60:
+        display_query = query[:60] + "..."
+    else:
+        display_query = query
+    
+    lines.append(f"Query: {display_query}")
     lines.append("")
     
     # Parsing section
@@ -491,14 +511,18 @@ def format_explain_output(explain_result: Dict[str, Any]) -> str:
         for match in c['top_matches'][:3]:
             sim = match['similarity']
             hit = "✓" if match['would_hit'] else "✗"
-            lines.append(f"│   {hit} {sim:.4f} - {match['cached_query'][:45]:<45} │")
+            # Smart truncation for cached queries
+            cached_query = match['cached_query']
+            if not cached_query.endswith('...') and len(cached_query) > 45:
+                cached_query = cached_query[:42] + "..."
+            lines.append(f"│   {hit} {sim:.4f} - {cached_query:<45} │")
     lines.append("└───────────────────────────────────────────────────────────────────┘")
     lines.append("")
     
     # RL Agent section
     lines.append("┌─ RL AGENT ────────────────────────────────────────────────────────┐")
     r = explain_result['rl_agent']
-    lines.append(f"│ State: {r['state']:<30} Epsilon: {r['epsilon']:<6}        │")
+    lines.append(f"│ State: {r['state']:<30} Epsilon: {r.get('epsilon', r.get('exploration_probability', 0)):<6}        │")
     lines.append(f"│ Best action: {r['best_action']:<20}                          │")
     lines.append("│ Q-values:                                                         │")
     for action, qval in r['q_values'].items():

@@ -4,7 +4,7 @@ Learns to optimize query execution strategies based on performance metrics
 """
 
 import numpy as np
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 
 
 class QLearningAgent:
@@ -173,7 +173,7 @@ class QLearningAgent:
             'avg_reward': np.mean([h['reward'] for h in self.training_history[-100:]]) if self.training_history else 0.0
         }
     
-    def explain_action(self, query_length: int, cache_hit: bool, complexity: int) -> Dict[str, any]:
+    def explain_action(self, query_length: int, cache_hit: bool, complexity: int) -> Dict[str, Any]:
         """
         Explain what action would be taken without executing
         Returns Q-values, state analysis, and predicted action for EXPLAIN command
@@ -189,9 +189,6 @@ class QLearningAgent:
         # Determine best action
         best_action = max(self.actions, key=lambda a: q_values.get(a, 0.0))
         
-        # Check if exploration would occur
-        would_explore = np.random.random() < self.epsilon
-        
         return {
             'state': state,
             'state_breakdown': {
@@ -202,8 +199,9 @@ class QLearningAgent:
             'q_values': q_values,
             'best_action': best_action,
             'epsilon': round(self.epsilon, 4),
-            'would_explore': would_explore,
-            'predicted_action': np.random.choice(self.actions) if would_explore else best_action,
+            'would_explore': self.epsilon > 0,
+            'predicted_action': best_action,  # Deterministic for explain
+            'exploration_probability': round(self.epsilon, 4),
             'agent_stats': {
                 'total_states_learned': len(self.q_table),
                 'total_updates': len(self.training_history),
