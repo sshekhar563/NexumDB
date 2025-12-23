@@ -149,6 +149,16 @@ impl SemanticCache {
         })
         .map_err(|e: PyErr| anyhow!("Python error: {}", e))
     }
+
+    pub fn explain_query(&self, query: &str) -> Result<String> {
+        Python::with_gil(|py| {
+            let cache_bound = self.cache.bind(py);
+            let result = cache_bound.call_method1("explain_query", (query,))?;
+            let explain_str: String = result.str()?.extract()?;
+            Ok(explain_str)
+        })
+        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
+    }
 }
 
 pub struct NLTranslator {
@@ -181,6 +191,44 @@ impl NLTranslator {
 
             let sql: String = result.extract()?;
             Ok(sql)
+        })
+        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
+    }
+}
+
+pub struct QueryExplainer {
+    _bridge: PythonBridge,
+}
+
+impl QueryExplainer {
+    pub fn new() -> Result<Self> {
+        let mut bridge = PythonBridge::new()?;
+        bridge.initialize()?;
+        Ok(Self { _bridge: bridge })
+    }
+
+    pub fn explain(&self, query: &str) -> Result<String> {
+        Python::with_gil(|py| {
+            let nexum_ai = PyModule::import(py, "nexum_ai.optimizer")?;
+            let explain_func = nexum_ai.getattr("explain_query_plan")?;
+            let format_func = nexum_ai.getattr("format_explain_output")?;
+
+            let result = explain_func.call1((query,))?;
+            let formatted = format_func.call1((result,))?;
+            let output: String = formatted.extract()?;
+            Ok(output)
+        })
+        .map_err(|e: PyErr| anyhow!("Python error: {}", e))
+    }
+
+    pub fn explain_raw(&self, query: &str) -> Result<String> {
+        Python::with_gil(|py| {
+            let nexum_ai = PyModule::import(py, "nexum_ai.optimizer")?;
+            let explain_func = nexum_ai.getattr("explain_query_plan")?;
+
+            let result = explain_func.call1((query,))?;
+            let output: String = result.str()?.extract()?;
+            Ok(output)
         })
         .map_err(|e: PyErr| anyhow!("Python error: {}", e))
     }
@@ -274,5 +322,25 @@ mod tests {
         println!("Translated: {} -> {}", nl_query, sql);
         assert!(sql.contains("SELECT"));
         assert!(sql.contains("users"));
+    }
+
+    #[test]
+    fn test_query_explainer() {
+        if !check_python_available() {
+            println!("Skipping test: Python environment not available");
+            return;
+        }
+
+        let explainer = super::QueryExplainer::new().unwrap();
+        let query = "SELECT * FROM users WHERE age > 25";
+
+        let plan = explainer.explain(query).unwrap();
+
+        println!("Explain output:\n{}", plan);
+        assert!(plan.contains("QUERY EXECUTION PLAN"));
+        assert!(plan.contains("PARSING"));
+        assert!(plan.contains("CACHE LOOKUP"));
+        assert!(plan.contains("RL AGENT"));
+        assert!(plan.contains("EXECUTION STRATEGY"));
     }
 }

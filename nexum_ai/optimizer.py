@@ -243,6 +243,54 @@ class SemanticCache:
             'cache_size_bytes': self.cache_path.stat().st_size if self.cache_path.exists() else 0
         }
     
+    def explain_query(self, query: str) -> Dict[str, Any]:
+        """
+        Analyze query without executing - returns cache similarity scores
+        and potential cache hits for EXPLAIN command
+        """
+        query_vec = self.vectorize(query)
+        
+        cache_analysis = []
+        best_match = None
+        best_similarity = 0.0
+        
+        for entry in self.cache:
+            similarity = self.cosine_similarity(query_vec, entry['vector'])
+            # Smart truncation for cached query display
+            cached_query = entry['query']
+            if len(cached_query) > 50:
+                display_query = cached_query[:50] + '...'
+            else:
+                display_query = cached_query
+                
+            cache_analysis.append({
+                'cached_query': display_query,
+                'similarity': round(similarity, 4),
+                'would_hit': similarity >= self.similarity_threshold
+            })
+            if similarity > best_similarity:
+                best_similarity = similarity
+                best_match = entry['query']
+        
+        # Sort by similarity descending
+        cache_analysis.sort(key=lambda x: x['similarity'], reverse=True)
+        
+        # Smart truncation for best match
+        if best_match and len(best_match) > 50:
+            best_match_display = best_match[:50] + '...'
+        else:
+            best_match_display = best_match
+        
+        return {
+            'query': query,
+            'cache_entries_checked': len(self.cache),
+            'similarity_threshold': self.similarity_threshold,
+            'best_match': best_match_display,
+            'best_similarity': round(best_similarity, 4),
+            'would_hit_cache': best_similarity >= self.similarity_threshold,
+            'top_matches': cache_analysis[:5]  # Top 5 similar cached queries
+        }
+    
     def set_cache_expiration(self, max_age_hours: int = 24) -> None:
         """Remove cache entries older than specified hours (future enhancement)"""
         # This would require adding timestamps to cache entries
@@ -310,6 +358,49 @@ class QueryOptimizer:
         next_state = "completed"
         
         self.update(state, action, reward, next_state)
+    
+    def explain_action(self, query: str, available_actions: List[str]) -> Dict[str, Any]:
+        """
+        Explain what action would be taken without executing.
+        
+        Returns Q-values and predicted action for EXPLAIN command.
+        This method provides a read-only analysis of the optimizer's decision-making
+        process without actually executing any action or updating the Q-table.
+        
+        Args:
+            query: SQL query string
+            available_actions: List of possible actions
+        
+        Returns:
+            Dict containing:
+                - state: state key string
+                - q_values: Q-values for all actions
+                - best_action: action with highest Q-value
+                - epsilon: current exploration rate
+                - would_explore: whether exploration is possible
+                - explanation: human-readable explanation of optimizer behavior
+        """
+        state = f"query_type_{len(query) // 10}"
+        
+        q_values = {}
+        if state in self.q_table:
+            q_values = {a: round(v, 4) for a, v in self.q_table[state].items()}
+        else:
+            q_values = {a: 0.0 for a in available_actions}
+        
+        best_action = max(available_actions, key=lambda a: q_values.get(a, 0.0))
+        
+        # Defensive truncation for display (limit to 20 chars)
+        best_action_display = best_action[:20] if len(best_action) > 20 else best_action
+        
+        return {
+            'state': state,
+            'q_values': q_values,
+            'best_action': best_action_display,
+            'epsilon': self.epsilon,
+            'would_explore': self.epsilon > 0,
+            'explanation': f'With ε={self.epsilon:.4f}, agent would explore {self.epsilon*100:.1f}% of the time'
+        }
 
 
 def test_vectorization() -> Dict[str, Any]:
@@ -322,6 +413,165 @@ def test_vectorization() -> Dict[str, Any]:
         'vector': vector[:10],
         'dimension': len(vector)
     }
+
+
+def explain_query_plan(query: str, cache: Optional[SemanticCache] = None, 
+                       optimizer: Optional[QueryOptimizer] = None) -> Dict[str, Any]:
+    """
+    Generate a complete EXPLAIN plan for a query
+    Shows parsing, cache analysis, and RL agent predictions
+    """
+    result = {
+        'query': query,
+        'query_length': len(query),
+        'parsing': {},
+        'cache_analysis': {},
+        'rl_agent': {},
+        'execution_strategy': {}
+    }
+    
+    # 1. Query Parsing Analysis
+    query_upper = query.upper().strip()
+    if query_upper.startswith('SELECT'):
+        query_type = 'SELECT'
+    elif query_upper.startswith('INSERT'):
+        query_type = 'INSERT'
+    elif query_upper.startswith('UPDATE'):
+        query_type = 'UPDATE'
+    elif query_upper.startswith('DELETE'):
+        query_type = 'DELETE'
+    elif query_upper.startswith('CREATE'):
+        query_type = 'CREATE'
+    else:
+        query_type = 'UNKNOWN'
+    
+    result['parsing'] = {
+        'query_type': query_type,
+        'query_length': len(query),
+        'complexity_estimate': min(len(query) // 20, 10),
+        'has_where_clause': 'WHERE' in query_upper,
+        'has_join': 'JOIN' in query_upper,
+        'has_aggregation': any(agg in query_upper for agg in ['COUNT', 'SUM', 'AVG', 'MAX', 'MIN']),
+        'has_order_by': 'ORDER BY' in query_upper,
+        'has_group_by': 'GROUP BY' in query_upper
+    }
+    
+    # 2. Cache Analysis
+    if cache is None:
+        cache = SemanticCache()
+    result['cache_analysis'] = cache.explain_query(query)
+    
+    # 3. RL Agent Analysis
+    if optimizer is None:
+        optimizer = QueryOptimizer()
+    
+    available_actions = ['use_cache', 'bypass_cache', 'full_scan', 'index_scan']
+    result['rl_agent'] = optimizer.explain_action(query, available_actions)
+    
+    # 4. Execution Strategy
+    would_hit_cache = result['cache_analysis'].get('would_hit_cache', False)
+    best_action = result['rl_agent'].get('best_action', 'full_scan')
+    
+    if would_hit_cache:
+        strategy = 'CACHE_HIT'
+        estimated_latency = '< 1ms'
+    elif best_action == 'use_cache':
+        strategy = 'CACHE_MISS_THEN_STORE'
+        estimated_latency = '5-50ms'
+    elif best_action == 'index_scan':
+        strategy = 'INDEX_SCAN'
+        estimated_latency = '1-10ms'
+    else:
+        strategy = 'FULL_SCAN'
+        estimated_latency = '10-100ms'
+    
+    result['execution_strategy'] = {
+        'strategy': strategy,
+        'estimated_latency': estimated_latency,
+        'will_cache_result': query_type == 'SELECT' and not would_hit_cache,
+        'recommendation': 'Use cached result' if would_hit_cache else 'Execute and cache'
+    }
+    
+    return result
+
+
+def format_explain_output(explain_result: Dict[str, Any]) -> str:
+    """Format EXPLAIN result as a readable table with defensive field width limits"""
+    
+    def truncate(value: Any, max_len: int) -> str:
+        """Truncate value to max length for box alignment"""
+        s = str(value)
+        if len(s) > max_len:
+            return s[:max_len - 3] + "..."
+        return s
+    
+    lines = []
+    lines.append("=" * 70)
+    lines.append("QUERY EXECUTION PLAN")
+    lines.append("=" * 70)
+    
+    # Smart query truncation
+    query = explain_result['query']
+    display_query = truncate(query, 60)
+    
+    lines.append(f"Query: {display_query}")
+    lines.append("")
+    
+    # Parsing section
+    lines.append("┌─ PARSING ─────────────────────────────────────────────────────────┐")
+    p = explain_result['parsing']
+    query_type = truncate(p['query_type'], 15)
+    lines.append(f"│ Type: {query_type:<15} Complexity: {p['complexity_estimate']}/10              │")
+    lines.append(f"│ WHERE: {str(p['has_where_clause']):<8} JOIN: {str(p['has_join']):<8} AGG: {str(p['has_aggregation']):<8}     │")
+    lines.append("└───────────────────────────────────────────────────────────────────┘")
+    lines.append("")
+    
+    # Cache section
+    lines.append("┌─ CACHE LOOKUP ────────────────────────────────────────────────────┐")
+    c = explain_result['cache_analysis']
+    # Defensive limits: cache_entries_checked capped at 99999 for display
+    entries_checked = min(c['cache_entries_checked'], 99999)
+    lines.append(f"│ Entries checked: {entries_checked:<5} Threshold: {c['similarity_threshold']:<6}            │")
+    lines.append(f"│ Best similarity: {c['best_similarity']:<6} Would hit: {str(c['would_hit_cache']):<6}              │")
+    if c['top_matches']:
+        lines.append("│ Top matches:                                                      │")
+        for match in c['top_matches'][:3]:
+            sim = match['similarity']
+            hit = "✓" if match['would_hit'] else "✗"
+            # Smart truncation for cached queries (limit to 45 chars)
+            cached_query = truncate(match['cached_query'], 45)
+            lines.append(f"│   {hit} {sim:.4f} - {cached_query:<45} │")
+    lines.append("└───────────────────────────────────────────────────────────────────┘")
+    lines.append("")
+    
+    # RL Agent section
+    lines.append("┌─ RL AGENT ────────────────────────────────────────────────────────┐")
+    r = explain_result['rl_agent']
+    # Defensive truncation for state (30 chars) and best_action (20 chars)
+    state_display = truncate(r['state'], 30)
+    best_action_display = truncate(r['best_action'], 20)
+    lines.append(f"│ State: {state_display:<30} Epsilon: {r.get('epsilon', 0):<6}        │")
+    lines.append(f"│ Best action: {best_action_display:<20}                          │")
+    lines.append("│ Q-values:                                                         │")
+    for action, qval in r['q_values'].items():
+        # Truncate action names to 15 chars for alignment
+        action_display = truncate(action, 15)
+        lines.append(f"│   {action_display:<15}: {qval:>8.4f}                                    │")
+    lines.append("└───────────────────────────────────────────────────────────────────┘")
+    lines.append("")
+    
+    # Execution strategy
+    lines.append("┌─ EXECUTION STRATEGY ──────────────────────────────────────────────┐")
+    e = explain_result['execution_strategy']
+    # Defensive truncation for strategy (20 chars)
+    strategy_display = truncate(e['strategy'], 20)
+    recommendation_display = truncate(e['recommendation'], 40)
+    lines.append(f"│ Strategy: {strategy_display:<20} Est. latency: {e['estimated_latency']:<10}   │")
+    lines.append(f"│ Will cache: {str(e['will_cache_result']):<8}                                          │")
+    lines.append(f"│ Recommendation: {recommendation_display:<40}       │")
+    lines.append("└───────────────────────────────────────────────────────────────────┘")
+    
+    return "\n".join(lines)
 
 
 def test_cache_persistence() -> Dict[str, Any]:
@@ -395,3 +645,18 @@ if __name__ == "__main__":
     print("\nRunning persistence test...")
     persistence_result = test_cache_persistence()
     print(f"\nPersistence test result: {persistence_result}")
+    
+    # Test EXPLAIN functionality
+    print("\n" + "="*70)
+    print("Testing EXPLAIN Query Plan")
+    print("="*70)
+    
+    # Add some test data to cache first
+    cache = SemanticCache()
+    cache.put("SELECT * FROM users WHERE age > 25", "User data result")
+    cache.put("SELECT name FROM products WHERE price < 100", "Product names")
+    
+    # Test explain
+    test_query = "SELECT * FROM users WHERE age > 30"
+    explain_result = explain_query_plan(test_query, cache)
+    print(format_explain_output(explain_result))
