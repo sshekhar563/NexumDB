@@ -240,13 +240,17 @@ impl Executor {
                     // Phase 2: Apply all updates atomically using batch operation
                     let updated_count = updates.len();
                     if !updates.is_empty() {
-                        let batch_operations: Vec<(Vec<u8>, Vec<u8>)> = updates
-                            .into_iter()
-                            .map(|(key, row)| {
-                                let value = serde_json::to_vec(&row).unwrap();
-                                (key, value)
-                            })
-                            .collect();
+                        let mut batch_operations: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
+
+                        // Serialize all rows first, fail early if any serialization fails
+                        for (key, row) in updates {
+                            let value = serde_json::to_vec(&row).map_err(|e| {
+                                StorageError::WriteError(format!("Failed to serialize row: {}", e))
+                            })?;
+                            batch_operations.push((key, value));
+                        }
+
+                        // Only apply batch if all serializations succeeded
                         self.storage.batch_set(batch_operations)?;
                     }
 
